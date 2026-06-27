@@ -1,11 +1,18 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://chaquo.com/maven") }
+    }
+    dependencies {
+        classpath("com.chaquo.python:gradle:17.0.0")
+    }
+}
+
 allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://chaquo.com/maven" }
-    }
-    dependencies {
-        classpath "com.chaquo.python:gradle:17.0.0"
     }
 }
 
@@ -14,6 +21,16 @@ val newBuildDir: Directory =
         .dir("../../build")
         .get()
 rootProject.layout.buildDirectory.value(newBuildDir)
+
+subprojects {
+    afterEvaluate {
+        if (extensions.findByName("android") != null) {
+            configure<com.android.build.gradle.BaseExtension> {
+                compileSdkVersion(36)
+            }
+        }
+    }
+}
 
 subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
@@ -26,3 +43,5 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+
+

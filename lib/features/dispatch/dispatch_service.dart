@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:send_message/send_message.dart';
 import 'location_service.dart';
+import 'package:flutter/services.dart';
 import '../database/database.dart';
 
 final dispatchProvider = Provider((ref) => DispatchService(ref));
 
 class DispatchService {
   final Ref ref;
+  static const smsChannel = MethodChannel("com.perilily/sms");
 
   DispatchService(this.ref);
 
@@ -33,46 +34,57 @@ class DispatchService {
           await _sendCovertSMS("SOS EMERGENCY: I have triggered a safety protocol and need immediate assistance.", recipients);
           break;
         case 'startVoice':
-        // TODO: Trigger device audio recording integration
           debugPrint("Initiating covert audio recording...");
           break;
         case 'startVid':
-        // TODO: Trigger device video recording integration
           debugPrint("Initiating covert video recording...");
           break;
       }
     }
   }
 
-  // Extracted location logic into its own helper
   Future<void> _shareLocation(int tier, List<String> recipients, ContactStorageService dbService) async {
     final locationService = ref.read(locationProvider);
     final position = await locationService.getCurrentLocation();
 
-    String locationLink = position != null
-        ? "https://maps.google.com/?q=${position.latitude},${position.longitude}"
-        : "Location currently unavailable.";
+    if (position != null) {
+      final String gmapLink = "https://maps.google.com/?q=${position.latitude},${position.longitude}";
 
-    String message = "Safety Alert: I have triggered a location sharing protocol. My location: $locationLink";
+      await _sendCovertSMS(
+        "Safety Alert: I need immediate help. My coordinates:",
+        recipients,
+      );
 
-    await dbService.saveLocationHistory(
-      locationLink,
-      "Tier $tier Contacts (${recipients.length})",
-    );
+      await Future.delayed(const Duration(seconds: 2));
+      // Message 2: Just coordinates (no URL, no http)
+      await _sendCovertSMS(
+        "${position.latitude}, ${position.longitude}",
+        recipients,
+      );
 
-    await _sendCovertSMS(message, recipients);
+      // Save as full Google Maps link in DB
+      await dbService.saveLocationHistory(
+        gmapLink,
+        "Tier $tier Contacts (${recipients.length})",
+      );
+
+    } else {
+      await _sendCovertSMS("Safety Alert: Location unavailable. Please call me.", recipients);
+    }
   }
 
   Future<void> _sendCovertSMS(String message, List<String> recipients) async {
     try {
-      debugPrint("Sending to: $recipients \nMessage: $message");
-      String result = await sendSMS(
-          message: message,
-          recipients: recipients
-      );
+      debugPrint("Sending background SMS to: $recipients \nMessage: $message");
+
+      final String result = await smsChannel.invokeMethod('sendBackgroundSms', {
+        'message': message,
+        'recipients': recipients,
+      });
+
       debugPrint("SMS Dispatch Result: $result");
     } catch (error) {
-      debugPrint("Failed to send SMS: $error");
+      debugPrint("Failed to send background SMS: $error");
     }
   }
 

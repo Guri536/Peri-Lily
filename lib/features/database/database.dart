@@ -27,7 +27,7 @@ class ContactStorageService {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 1,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -43,19 +43,19 @@ class ContactStorageService {
       )
     ''');
 
+    // 2. Protocols
     await db.execute('''
       CREATE TABLE protocols (
         id $idType,
+        name $textType,
         trigger_type $textType, 
         trigger_value $textType, 
-        action_tier $intType
+        action_map $textType
       )
     ''');
-  }
 
-  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      await db.execute('''
+    // 3. Locations
+    await db.execute('''
       CREATE TABLE locations (
         id $idType,
         locationData $textType,
@@ -64,7 +64,8 @@ class ContactStorageService {
       )
     ''');
 
-      await db.execute('''
+    // 4. Recordings
+    await db.execute('''
       CREATE TABLE recordings (
         id $idType,
         title $textType,
@@ -73,25 +74,9 @@ class ContactStorageService {
         timestamp $textType
       )
     ''');
-    }
+  }
 
-    if (oldVersion < 3) {
-      await db.execute('''
-        ALTER TABLE protocols DROP COLUMN action_tier;
-      ''');
-    }
-
-    if (oldVersion < 4) {
-      await db.execute('''
-          DELETE FROM protocols
-        ''');
-    }
-
-    if (oldVersion < 5) {
-      await db.execute("ALTER TABLE protocols ADD COLUMN action_map $textType");
-      await db.execute("DELETE FROM sqlite_sequence WHERE name = 'protocols'");
-      await db.execute("ALTER TABLE protocols ADD COLUMN name $textType");
-    }
+  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
   }
 
   Future<void> addTieredContact(String name, String phone, int tier) async {

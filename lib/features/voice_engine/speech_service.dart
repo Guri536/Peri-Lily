@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../dispatch/dispatch_service.dart';
 import '../database/database.dart';
@@ -9,61 +10,80 @@ import '../database/database.dart';
 final speechServiceProvider = NotifierProvider<SpeechService, bool>(SpeechService.new);
 
 class SpeechService extends Notifier<bool> {
-  // 1. Establish the bridge to Android/Kotlin
+  // Bridge to your Python engine
   static const platform = MethodChannel('com.perilily/python_stt');
+
+  // Native OS speech listener
+  final stt.SpeechToText _speech = stt.SpeechToText();
   List<Map<String, dynamic>> _activeProtocols = [];
 
   @override
   bool build() {
-    // 2. Listen for Python sending recognized words back to Flutter
-    platform.setMethodCallHandler(_handleNativeCall);
     return false;
-  }
-
-  Future<dynamic> _handleNativeCall(MethodCall call) async {
-    if (call.method == 'onWordRecognized') {
-      final String words = call.arguments['text'];
-      _checkForTriggers(words.toLowerCase());
-    }
   }
 
   Future<void> startListening() async {
     final db = ref.read(databaseProvider);
     _activeProtocols = await db.getAllProtocols();
 
-    try {
-      // 3. Tell Kotlin/Python to wake up and start the mic
-      await platform.invokeMethod('startListening');
+    // 1. Initialize the native OS microphone with an auto-restart fallback
+    bool available = await _speech.initialize(
+      onStatus: (status) => debugPrint('Speech Status: $status'),
+      onError: (error) {
+        debugPrint('Speech Error: ${error.errorMsg}');
+
+        // If Android OS gives up, we force it to reboot and keep listening!
+        if (error.errorMsg == 'error_speech_timeout' || error.errorMsg == 'error_no_match') {
+          stopListening();
+          Future.delayed(const Duration(seconds: 1), () => startListening());
+        }
+      },
+    );
+
+    if (available) {
       state = true;
-    } on PlatformException catch (e) {
-      debugPrint("Failed to start Python engine: '${e.message}'.");
+      // 2. Start streaming the microphone data natively
+      _speech.listen(
+          onResult: (result) {
+            String transcribedText = result.recognizedWords;
+            // Only evaluate if we actually heard something
+            if (transcribedText.isNotEmpty) {
+              print(transcribedText);
+              _checkForTriggers(transcribedText);
+            }
+          },
+          listenOptions: stt.SpeechListenOptions(
+            pauseFor: const Duration(seconds: 10),
+            listenMode: stt.ListenMode.confirmation,
+          )
+      );
+    } else {
+      debugPrint("Speech recognition unavailable on this device.");
       state = false;
     }
   }
 
-  Future<void> stopListening() async {
-    try {
-      await platform.invokeMethod('stopListening');
-      state = false;
-    } on PlatformException catch (e) {
-      debugPrint("Failed to stop Python engine: '${e.message}'.");
-    }
+  void stopListening() {
+    _speech.stop();
+    state = false;
   }
 
-  void _checkForTriggers(String transcribedText) {
+  void _checkForTriggers(String transcribedText) async {
     for (var protocol in _activeProtocols) {
       if (protocol['trigger_type'] == 'keyword') {
-        // Parse the JSON array of Safe Words
-        List<dynamic> safeWords = jsonDecode(protocol['trigger_value']);
+        try {
+          // 3. Send the transcribed text to your Local Python Script!
+          final bool isTriggered = await platform.invokeMethod('analyzeText', {
+            'text': transcribedText,
+            'safeWords': protocol['trigger_value']
+          });
 
-        for (String safeWord in safeWords) {
-          if (transcribedText.contains(safeWord.toLowerCase())) {
-            debugPrint('🚨 SAFE WORD DETECTED: $safeWord');
+          // 4. If Python says we have a match, execute the protocol
+          if (isTriggered) {
+            debugPrint('🚨 PYTHON ENGINE DETECTED SAFE WORD');
 
-            // FIX: Parse the action_map JSON instead of the deleted action_tier
             Map<String, dynamic> actionMap = jsonDecode(protocol['action_map']);
 
-            // Execute the specific actions mapped to each tier
             actionMap.forEach((tierStr, actionsList) {
               int tier = int.parse(tierStr);
               List<String> actions = List<String>.from(actionsList);
@@ -71,9 +91,12 @@ class SpeechService extends Notifier<bool> {
             });
 
             stopListening();
+            // Optional: cool down period before listening again
             Future.delayed(const Duration(seconds: 5), () => startListening());
-            return; // Exit after first match to prevent duplicate triggers
+            return; // Exit loop so we don't trigger multiple times at once
           }
+        } on PlatformException catch (e) {
+          debugPrint("Failed to communicate with Python Engine: '${e.message}'.");
         }
       }
     }

@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:peri_lily_android/core/permission_service.dart';
 import 'package:peri_lily_android/features/database/database.dart';
 
 import 'features/contacts/contact_screen.dart';
-// Update these imports to match your project structure
 import 'features/decoy_ui/fake_ui_screen.dart';
 import 'features/protocols/protocol_setup_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(
-    // ProviderScope is required for Riverpod to work[cite: 9]
     const ProviderScope(child: PeriLilyApp()),
   );
 }
@@ -31,7 +30,11 @@ class PeriLilyApp extends StatelessWidget {
         useMaterial3: true,
         appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
       ),
-      home: const MainDashboardScreen(),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const MainDashboardScreen(),
+        '/decoy': (context) => const FakeUiScreen(),
+      },
     );
   }
 }
@@ -117,7 +120,12 @@ class _HomeActivityTabState extends ConsumerState<HomeActivityTab> {
   @override
   void initState() {
     super.initState();
-    _loadHistory();
+    _initializeSafeEnvironment();
+  }
+
+  Future<void> _initializeSafeEnvironment() async {
+    await PermissionsService.requestCorePermissions();
+    await _loadHistory();
   }
 
   Future<void> _loadHistory() async {
