@@ -5,11 +5,13 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
-final databaseProvider = Provider<ContactStorageService>((ref) {
-  return ContactStorageService();
+import '../../core/enums.dart';
+
+final databaseProvider = Provider<StorageService>((ref) {
+  return StorageService();
 });
 
-class ContactStorageService {
+class StorageService {
   static Database? _database;
   static const idType = 'INTEGER PRIMARY KEY AUTOINCREMENT';
   static const textType = 'TEXT NOT NULL';
@@ -27,7 +29,7 @@ class ContactStorageService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -74,9 +76,67 @@ class ContactStorageService {
         timestamp $textType
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE gesture_map (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        decoyType   TEXT NOT NULL,
+        gestureSlot TEXT NOT NULL,
+        protocolId  INTEGER,
+        UNIQUE(decoyType, gestureSlot)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT
+      )
+    ''');
   }
 
   Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      db.execute('''
+        CREATE TABLE gesture_map(
+          id $idType,
+          decoyType $textType,
+          gestureSlot $textType, 
+          protocolId INTEGER,
+          UNIQUE(decoyType, gestureSlot)
+        )
+      ''');
+
+      final decoyTypes = [
+        DecoyType.fakeCall.dbValue,
+        DecoyType.socialFeed.dbValue,
+        DecoyType.notesDash.dbValue,
+      ];
+      final List<String> slots = [
+        Gestures.upperDouble.dbValue,
+        Gestures.upperLong.dbValue,
+        Gestures.middleDouble.dbValue,
+        Gestures.lowerDouble.dbValue,
+        Gestures.lowerLong.dbValue,
+      ];
+
+      for (var type in decoyTypes) {
+        for (var slot in slots) {
+          await db.insert('gesture_map', {
+            'decoyType': type,
+            'gestureSlot': slot,
+            'protocolId': null,
+          });
+        }
+      }
+
+      await db.execute('''
+          CREATE TABLE app_settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+          )
+        ''');
+    }
   }
 
   Future<void> addTieredContact(String name, String phone, int tier) async {
@@ -139,6 +199,12 @@ class ContactStorageService {
   Future<List<Map<String, dynamic>>> getProtocolStructure() async {
     final db = await database;
     return await db.rawQuery('PRAGMA table_info(protocols)');
+  }
+
+  Future<Map<String, dynamic>?> getProtocolById(int id) async {
+    final db = await database;
+    final result = await db.query('protocols', where: 'id = ?', whereArgs: [id]);
+    return result.isEmpty ? null : result.first;
   }
 
   Future<void> updateProtocol(
@@ -231,4 +297,43 @@ class ContactStorageService {
     final version = await db.getVersion();
     print('Current Database Version: $version');
   }
+
+  Future<void> setGestureProtocol(String decoyType, String slot, int? protocolId) async {
+    final db = await database;
+    await db.update(
+      'gesture_map',
+      {'protocolId': protocolId},
+      where: 'decoyType = ? AND gestureSlot = ?',
+      whereArgs: [decoyType, slot],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getGestureMapForDecoy(String decoyType) async {
+    final db = await database;
+    return await db.query(
+      'gesture_map',
+      where: 'decoyType = ?',
+      whereArgs: [decoyType],
+    );
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      'app_settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<String?> getSetting(String key) async {
+    final db = await database;
+    final result = await db.query(
+      'app_settings',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    return result.isEmpty ? null : result.first['value'] as String?;
+  }
+
 }

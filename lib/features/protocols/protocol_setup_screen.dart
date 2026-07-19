@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/actions.dart';
+import '../../core/enums.dart';
 import '../database/database.dart';
 
 class ProtocolSetupScreen extends ConsumerStatefulWidget {

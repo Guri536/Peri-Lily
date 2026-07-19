@@ -3,16 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:peri_lily_android/core/permission_service.dart';
 import 'package:peri_lily_android/features/database/database.dart';
+import 'package:peri_lily_android/features/settings/settings_screen.dart';
 
 import 'features/contacts/contact_screen.dart';
-import 'features/decoy_ui/fake_ui_screen.dart';
+import 'features/decoy_ui/decoy_call_screen.dart';
 import 'features/protocols/protocol_setup_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(
-    const ProviderScope(child: PeriLilyApp()),
-  );
+  runApp(const ProviderScope(child: PeriLilyApp()));
 }
 
 class PeriLilyApp extends StatelessWidget {
@@ -53,7 +52,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   final List<Widget> _screens = [
     const HomeActivityTab(),
     const ContactsScreen(),
-    ProtocolSetupScreen(),
+    const ProtocolSetupScreen(),
+    const DecoySettingsScreen(),
   ];
 
   @override
@@ -98,6 +98,11 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             icon: Icon(Icons.security_outlined),
             selectedIcon: Icon(Icons.security),
             label: 'Protocols',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.handyman_outlined),
+            selectedIcon: Icon(Icons.handyman),
+            label: "Triggers",
           ),
         ],
       ),

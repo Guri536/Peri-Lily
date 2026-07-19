@@ -43,7 +43,7 @@ class DispatchService {
     }
   }
 
-  Future<void> _shareLocation(int tier, List<String> recipients, ContactStorageService dbService) async {
+  Future<void> _shareLocation(int tier, List<String> recipients, StorageService dbService) async {
     final locationService = ref.read(locationProvider);
     final position = await locationService.getCurrentLocation();
 

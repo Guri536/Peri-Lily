@@ -1,0 +1,12 @@
+theme: jekyll-theme-minimal
+
+title: PeriLily
+description: >
+  A covert personal safety and emergency response Android applicatio
+
+logo: lib/core/assets/Peri_Lily.png
+
+show_downloads: false
+
+github:
+  repository_url: https://github.com/Guri536/Peri-Lily
